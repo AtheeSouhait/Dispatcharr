@@ -16,11 +16,14 @@ import {
   Tabs,
   Table,
   Divider,
+  Tooltip,
 } from '@mantine/core';
-import { Play } from 'lucide-react';
+import { Play, Link as LinkIcon } from 'lucide-react';
 import useVODStore from '../store/useVODStore';
 import useVideoStore from '../store/useVideoStore';
 import useSettingsStore from '../store/settings';
+import { copyToClipboard } from '../utils';
+import { notifications } from '@mantine/notifications';
 
 const imdbUrl = (imdb_id) =>
   imdb_id ? `https://www.imdb.com/title/${imdb_id}` : '';
@@ -130,6 +133,7 @@ const SeriesModal = ({ series, opened, onClose }) => {
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [episodeProviders, setEpisodeProviders] = useState({});
 
   useEffect(() => {
     if (opened && series) {
@@ -159,7 +163,6 @@ const SeriesModal = ({ series, opened, onClose }) => {
       fetchSeriesProviders(series.id)
         .then((providersData) => {
           setProviders(providersData);
-          // Set the first provider as default if none selected
           if (providersData.length > 0 && !selectedProvider) {
             setSelectedProvider(providersData[0]);
           }
@@ -172,7 +175,13 @@ const SeriesModal = ({ series, opened, onClose }) => {
           setLoadingProviders(false);
         });
     }
-  }, [opened, series, fetchSeriesInfo, fetchSeriesProviders, selectedProvider]);
+  }, [
+    opened,
+    series,
+    fetchSeriesInfo,
+    fetchSeriesProviders,
+    selectedProvider,
+  ]);
 
   useEffect(() => {
     if (!opened) {
@@ -181,6 +190,7 @@ const SeriesModal = ({ series, opened, onClose }) => {
       setProviders([]);
       setSelectedProvider(null);
       setLoadingProviders(false);
+      setEpisodeProviders({});
     }
   }, [opened]);
 
@@ -188,7 +198,6 @@ const SeriesModal = ({ series, opened, onClose }) => {
   const seriesEpisodes = React.useMemo(() => {
     if (!detailedSeries) return [];
 
-    // Try to get episodes from the fetched data
     if (detailedSeries.episodesList) {
       return detailedSeries.episodesList.sort((a, b) => {
         if (a.season_number !== b.season_number) {
@@ -198,7 +207,26 @@ const SeriesModal = ({ series, opened, onClose }) => {
       });
     }
 
-    // If no episodes in detailed series, return empty array
+    if (detailedSeries.episodes) {
+      const withProviders = detailedSeries.episodes.map((episode) => ({
+        ...episode,
+        providers: episode.providers || [],
+      }));
+
+      const providersMap = withProviders.reduce((acc, episode) => {
+        acc[episode.id] = episode.providers;
+        return acc;
+      }, {});
+      setEpisodeProviders(providersMap);
+
+      return withProviders.sort((a, b) => {
+        if (a.season_number !== b.season_number) {
+          return (a.season_number || 0) - (b.season_number || 0);
+        }
+        return (a.episode_number || 0) - (b.episode_number || 0);
+      });
+    }
+
     return [];
   }, [detailedSeries]);
 
@@ -611,20 +639,66 @@ const SeriesModal = ({ series, opened, onClose }) => {
                                   </Text>
                                 </Table.Td>
                                 <Table.Td>
-                                  <ActionIcon
-                                    variant="filled"
-                                    color="blue"
-                                    size="sm"
-                                    disabled={
-                                      providers.length > 0 && !selectedProvider
-                                    }
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePlayEpisode(episode);
-                                    }}
-                                  >
-                                    <Play size={12} />
-                                  </ActionIcon>
+                                  <Group spacing="xs">
+                                    {(() => {
+                                      const providersForEpisode =
+                                        episode.providers ||
+                                        episodeProviders[episode.id] || [];
+
+                                      const match = selectedProvider
+                                        ? providersForEpisode.find(
+                                            (item) =>
+                                              item.m3u_account?.id ===
+                                              selectedProvider.m3u_account?.id
+                                          )
+                                        : providersForEpisode[0];
+
+                                      return match?.stream_url ? (
+                                        <Tooltip
+                                          label={match.stream_url}
+                                          position="bottom"
+                                        >
+                                          <ActionIcon
+                                            variant="light"
+                                            color="indigo"
+                                            size="sm"
+                                            onClick={async (event) => {
+                                              event.stopPropagation();
+                                              const success =
+                                                await copyToClipboard(
+                                                  match.stream_url
+                                                );
+                                              notifications.show({
+                                                title: success
+                                                  ? 'URL Copied'
+                                                  : 'Copy Failed',
+                                                message: success
+                                                  ? 'Stream URL copied to clipboard'
+                                                  : 'Failed to copy stream URL',
+                                                color: success ? 'green' : 'red',
+                                              });
+                                            }}
+                                          >
+                                            <LinkIcon size={12} />
+                                          </ActionIcon>
+                                        </Tooltip>
+                                      ) : null;
+                                    })()}
+                                    <ActionIcon
+                                      variant="filled"
+                                      color="blue"
+                                      size="sm"
+                                      disabled={
+                                        providers.length > 0 && !selectedProvider
+                                      }
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePlayEpisode(episode);
+                                      }}
+                                    >
+                                      <Play size={12} />
+                                    </ActionIcon>
+                                  </Group>
                                 </Table.Td>
                               </Table.Tr>
                               {expandedEpisode === episode.id && (

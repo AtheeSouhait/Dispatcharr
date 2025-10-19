@@ -391,17 +391,36 @@ class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
             include_episodes = request.query_params.get('include_episodes', 'true').lower() == 'true'
             if include_episodes and custom_props.get('episodes_fetched', False):
                 logger.debug(f"Including episodes for series {series.id}")
+
+                # Prefetch episode relations once to avoid repeated queries
+                episode_relations_map = {}
+                for rel in M3UEpisodeRelation.objects.filter(
+                    episode__series=series,
+                    m3u_account__is_active=True
+                ).select_related('episode', 'm3u_account'):
+                    episode_relations_map.setdefault(rel.episode_id, []).append(rel)
+
                 episodes_by_season = {}
                 for episode in series.episodes.all().order_by('season_number', 'episode_number'):
                     season_key = str(episode.season_number or 0)
                     if season_key not in episodes_by_season:
                         episodes_by_season[season_key] = []
 
-                    # Get episode relation for additional data
-                    episode_relation = M3UEpisodeRelation.objects.filter(
-                        episode=episode,
-                        m3u_account=relation.m3u_account
-                    ).first()
+                    episode_relations = episode_relations_map.get(episode.id, [])
+                    episode_relation = next(
+                        (rel for rel in episode_relations if rel.m3u_account_id == relation.m3u_account_id),
+                        None,
+                    )
+
+                    relations_serialized = M3UEpisodeRelationSerializer(
+                        episode_relations,
+                        many=True
+                    ).data
+
+                    # Ensure stream_url present on serialized data (serializer's method field)
+                    if episode_relations:
+                        for rel_obj, rel_data in zip(episode_relations, relations_serialized):
+                            rel_data['stream_url'] = rel_obj.get_stream_url()
 
                     episode_data = {
                         'id': episode.id,
@@ -420,6 +439,8 @@ class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
                         'movie_image': episode.custom_properties.get('movie_image', '') if episode.custom_properties else '',
                         'container_extension': episode_relation.container_extension if episode_relation else 'mp4',
                         'type': 'episode',
+                        'stream_url': episode_relation.get_stream_url() if episode_relation else None,
+                        'providers': relations_serialized,
                         'series': {
                             'id': series.id,
                             'name': series.name

@@ -73,6 +73,7 @@ class M3UMovieRelationSerializer(serializers.ModelSerializer):
     category = VODCategorySerializer(read_only=True)
     m3u_account = M3UAccountSerializer(read_only=True)
     quality_info = serializers.SerializerMethodField()
+    stream_url = serializers.SerializerMethodField()
 
     class Meta:
         model = M3UMovieRelation
@@ -145,11 +146,14 @@ class M3UMovieRelationSerializer(serializers.ModelSerializer):
         # 5. Fallback - no quality info available
         return None
 
+    def get_stream_url(self, obj):
+        return obj.get_stream_url()
 
 class M3UEpisodeRelationSerializer(serializers.ModelSerializer):
     episode = EpisodeSerializer(read_only=True)
     m3u_account = M3UAccountSerializer(read_only=True)
     quality_info = serializers.SerializerMethodField()
+    stream_url = serializers.SerializerMethodField()
 
     class Meta:
         model = M3UEpisodeRelation
@@ -221,6 +225,9 @@ class M3UEpisodeRelationSerializer(serializers.ModelSerializer):
 
         # 5. Fallback - no quality info available
         return None
+
+    def get_stream_url(self, obj):
+        return obj.get_stream_url()
 
 
 class EnhancedSeriesSerializer(serializers.ModelSerializer):

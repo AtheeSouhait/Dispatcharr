@@ -12,11 +12,15 @@ import {
   Loader,
   Stack,
   Modal,
+  Tooltip,
+  ActionIcon,
 } from '@mantine/core';
-import { Play } from 'lucide-react';
+import { Play, Link as LinkIcon } from 'lucide-react';
 import useVODStore from '../store/useVODStore';
 import useVideoStore from '../store/useVideoStore';
 import useSettingsStore from '../store/settings';
+import { copyToClipboard } from '../utils';
+import { notifications } from '@mantine/notifications';
 
 const imdbUrl = (imdb_id) =>
   imdb_id ? `https://www.imdb.com/title/${imdb_id}` : '';
@@ -506,8 +510,36 @@ const VODModal = ({ vod, opened, onClose }) => {
                         <Badge color="blue" variant="light">
                           {providers[0].m3u_account.name}
                         </Badge>
+                        {providers[0].stream_id && (
+                          <Badge color="orange" variant="outline" size="xs">
+                            Stream {providers[0].stream_id}
+                          </Badge>
+                        )}
+                        {providers[0].stream_url && (
+                          <Tooltip label={providers[0].stream_url} position="bottom">
+                            <ActionIcon
+                              variant="light"
+                              color="indigo"
+                              size="sm"
+                              onClick={async () => {
+                                const success = await copyToClipboard(
+                                  providers[0].stream_url
+                                );
+                                notifications.show({
+                                  title: success ? 'URL Copied' : 'Copy Failed',
+                                  message: success
+                                    ? 'Stream URL copied to clipboard'
+                                    : 'Failed to copy stream URL',
+                                  color: success ? 'green' : 'red',
+                                });
+                              }}
+                            >
+                              <LinkIcon size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
                       </Group>
-                    ) : (
+                    ) : providers.length > 1 ? (
                       <Select
                         data={providers.map((provider) => ({
                           value: provider.id.toString(),
@@ -523,8 +555,37 @@ const VODModal = ({ vod, opened, onClose }) => {
                         placeholder="Select stream..."
                         style={{ minWidth: 250 }}
                         disabled={loadingProviders}
+                        rightSection={
+                          selectedProvider?.stream_url ? (
+                            <Tooltip
+                              label={selectedProvider.stream_url}
+                              position="bottom"
+                            >
+                              <ActionIcon
+                                variant="light"
+                                color="indigo"
+                                size="sm"
+                                onClick={async (event) => {
+                                  event.stopPropagation();
+                                  const success = await copyToClipboard(
+                                    selectedProvider.stream_url
+                                  );
+                                  notifications.show({
+                                    title: success ? 'URL Copied' : 'Copy Failed',
+                                    message: success
+                                      ? 'Stream URL copied to clipboard'
+                                      : 'Failed to copy stream URL',
+                                    color: success ? 'green' : 'red',
+                                  });
+                                }}
+                              >
+                                <LinkIcon size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          ) : null
+                        }
                       />
-                    )}
+                    ) : null}
                   </Box>
                 )}
 
